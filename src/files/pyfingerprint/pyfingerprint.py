@@ -41,6 +41,7 @@ FINGERPRINT_READIMAGE = 0x01
 
 ## Note: The documentation mean upload to host computer.
 FINGERPRINT_DOWNLOADIMAGE = 0x0A
+FINGERPRINT_UPLOADIMAGE = 0x0B
 
 FINGERPRINT_CONVERTIMAGE = 0x02
 
@@ -92,6 +93,7 @@ FINGERPRINT_ERROR_CLEARDATABASE = 0x11
 
 FINGERPRINT_ERROR_NOTMATCHING = 0x08
 
+FINGERPRINT_ERROR_UPLOADIMAGE = 0x0E
 FINGERPRINT_ERROR_DOWNLOADIMAGE = 0x0F
 FINGERPRINT_ERROR_DOWNLOADCHARACTERISTICS = 0x0D
 
@@ -678,6 +680,68 @@ class PyFingerprint(object):
 
     ## TODO:
     ## Implementation of uploadImage()
+    def uploadImage(self, imageLoc):
+        """
+        Upload the image of a finger from host computer to Image Buffer.
+
+        @param string imageLoc
+        @return void
+        """
+        image = Image.open(imageLoc)
+        width, height = image.size
+        pixels = image.read()
+
+        packetPayload = []
+
+        ## Y coordinate of current pixel
+        line = 0
+
+        ## Get follow-up data packets until the last data packet is received
+        while (line != height):
+
+            ## X coordinate of current pixel
+            x = 0
+
+            for i in range(0, width):
+                ## Thanks to Danylo Esterman <soundcracker@gmail.com> for the "multiple with 17" improvement:
+
+                ## Draw left 4 Bits one byte of package
+                left = (pixels[x, line] / 17) << 4
+                x = x + 1
+
+                ## Draw right 4 Bits one byte of package
+                right = (pixels[x, line] / 17)
+                packetPayload[i] = left | right
+                x = x + 1
+
+            line = line + 1
+
+        packetPayload = (
+            FINGERPRINT_UPLOADIMAGE,
+        )
+
+        self.__writePacket(FINGERPRINT_COMMANDPACKET, packetPayload)
+        receivedPacket = self.__readPacket()
+
+        receivedPacketType = receivedPacket[0]
+        receivedPacketPayload = receivedPacket[1]
+
+        if (receivedPacketType != FINGERPRINT_ACKPACKET):
+            raise Exception('The received packet is no ack packet!')
+
+        ## DEBUG: Image read successful
+        if (receivedPacketPayload[0] == FINGERPRINT_OK):
+            return True
+
+        elif (receivedPacketPayload[0] == FINGERPRINT_ERROR_COMMUNICATION):
+            raise Exception('Communication error')
+
+        elif (receivedPacketPayload[0] == FINGERPRINT_ERROR_UPLOADIMAGE):
+            raise Exception('Could not upload image')
+
+        else:
+            raise Exception('Unknown error ' + hex(receivedPacketPayload[0]))
+
 
     def downloadImage(self, imageDestination):
         """
